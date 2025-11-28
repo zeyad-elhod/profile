@@ -31,8 +31,14 @@
       const wrap = document.getElementById('table-wrap');
       try{
         const res = await fetch('/api/cars');
-        if(!res.ok) throw new Error('Network response was not ok');
-        const rows = await res.json();
+        // attempt to parse JSON body (may contain error message)
+        let body;
+        try{ body = await res.json(); }catch(e){ body = null }
+        if(!res.ok){
+          const msg = body && (body.message || body.error) ? (body.message || body.error) : `HTTP ${res.status}`;
+          throw new Error(msg);
+        }
+        const rows = body || [];
         if(!Array.isArray(rows)) throw new Error('Invalid data');
         if(rows.length === 0){
           status.textContent = 'No rows returned.';
