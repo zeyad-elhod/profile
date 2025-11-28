@@ -20,7 +20,7 @@ export default async function handler(req, res) {
       body = raw ? JSON.parse(raw) : {};
     }
 
-    const sql = (body && body.sql) ? String(body.sql) : '';
+    const sql = body && body.sql ? String(body.sql) : '';
     if (!sql) {
       res.setHeader('Content-Type', 'application/json');
       return res.status(400).json({ error: 'No SQL provided' });
@@ -35,7 +35,7 @@ export default async function handler(req, res) {
     }
 
     // Forbidden keywords
-    const forbidden = ['DELETE','UPDATE','INSERT','DROP','ALTER','TRUNCATE','CREATE','REPLACE','MERGE'];
+    const forbidden = ['DELETE', 'UPDATE', 'INSERT', 'DROP', 'ALTER', 'TRUNCATE', 'CREATE', 'REPLACE', 'MERGE'];
     for (const kw of forbidden) {
       const re = new RegExp('\\b' + kw + '\\b', 'i');
       if (re.test(sql)) {
@@ -44,21 +44,23 @@ export default async function handler(req, res) {
       }
     }
 
-    // Initialize sql.js with locateFile pointing to the wasm URL
-    const locateFile = () => 'https://sql.js.org/dist/sql-wasm.wasm';
-    const SQL = await initSqlJs({ locateFile });
+    // Initialize sql.js with local wasm
+    const SQL = await initSqlJs({
+      locateFile: (file) => path.join(process.cwd(), 'node_modules/sql.js/dist', file),
+    });
 
-    // Load DB file from ./cars.db
-    const dbPath = path.resolve(process.cwd(), 'cars.db');
+    // Load DB file from ./cars.db or ./data/cars.db
+    const primaryDbPath = path.join(process.cwd(), 'cars.db');
+    const dataDbPath = path.join(process.cwd(), 'data', 'cars.db');
+    const dbPath = fs.existsSync(primaryDbPath) ? primaryDbPath : dataDbPath;
+
     if (!fs.existsSync(dbPath)) {
       res.setHeader('Content-Type', 'application/json');
-      return res.status(500).json({ error: 'Database file not found at ./cars.db' });
+      return res.status(500).json({ error: 'Database file not found' });
     }
 
     const fileBuffer = fs.readFileSync(dbPath);
-    const u8 = new Uint8Array(fileBuffer);
-
-    const db = new SQL.Database(u8);
+    const db = new SQL.Database(new Uint8Array(fileBuffer));
 
     // Execute the query
     const results = db.exec(sql);
