@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Cars NL Query</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .controls{display:flex; gap:10px; align-items:center; margin-top:10px}
+    textarea{width:100%; min-height:110px; padding:10px; font-size:15px; border:1px solid #d7e1eb; border-radius:8px; resize:vertical; font-family:inherit}
+    button{background:var(--accent); color:white; border:none; padding:10px 14px; border-radius:8px; font-weight:600; cursor:pointer}
+    button:hover{filter:brightness(0.96)}
+    button:disabled{opacity:0.6; cursor:not-allowed}
+    .status{margin:10px 0 0; color:#333}
+    .error{color:#b00020}
+    .sr-only{position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0}
+    .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:12px; margin-top:16px}
+    .card{background:#f7f9fb; border:1px solid #e6eef6; border-radius:10px; padding:12px; display:none}
+    .card h3{margin:0 0 8px; font-size:15px; color:#0b66c2}
+    pre{margin:0; background:white; border:1px solid #d7e1eb; border-radius:8px; padding:10px; white-space:pre-wrap; word-break:break-word; font-size:14px}
+  </style>
+</head>
+<body>
+  <main class="container">
+    <header class="header">
+      <div>
+        <h1 class="name">Cars NL Query</h1>
+        <p class="title">Ask natural-language questions; see SQL + results.</p>
+      </div>
+    </header>
+
+    <section class="section">
+      <h2>Ask the database</h2>
+      <p>Type a question about the <code>cars</code> table (brand, model, year, mileage_km, price_eur, accident_history, fuel_type, transmission).</p>
+      <form id="ask-form">
+        <label for="question" class="sr-only">Question</label>
+        <textarea id="question" name="question" placeholder="Example: Show the top 5 cheapest diesel cars with automatic transmission."></textarea>
+        <div class="controls">
+          <button type="submit" id="ask-btn">Ask DB</button>
+          <div id="status" class="status" aria-live="polite">Waiting for your question.</div>
+        </div>
+      </form>
+
+      <div class="cards">
+        <div class="card" id="sql-card">
+          <h3>Generated SQL</h3>
+          <pre id="sql-output">(waiting)</pre>
+        </div>
+        <div class="card" id="rows-card">
+          <h3>Result rows</h3>
+          <pre id="rows-output">[]</pre>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (function(){
+      const form = document.getElementById('ask-form');
+      const questionField = document.getElementById('question');
+      const statusEl = document.getElementById('status');
+      const sqlCard = document.getElementById('sql-card');
+      const rowsCard = document.getElementById('rows-card');
+      const sqlOutput = document.getElementById('sql-output');
+      const rowsOutput = document.getElementById('rows-output');
+      const askBtn = document.getElementById('ask-btn');
+
+      function setStatus(text, isError){
+        statusEl.textContent = text;
+        statusEl.className = isError ? 'status error' : 'status';
+      }
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const question = questionField.value.trim();
+        if (!question) {
+          setStatus('Please enter a question.', true);
+          return;
+        }
+
+        askBtn.disabled = true;
+        setStatus('Sending to /api/nl-query...');
+        sqlCard.style.display = 'none';
+        rowsCard.style.display = 'none';
+        sqlOutput.textContent = '';
+        rowsOutput.textContent = '';
+
+        try {
+          const response = await fetch('/api/nl-query', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question })
+          });
+
+          const text = await response.text();
+          let data;
+          try {
+            data = text ? JSON.parse(text) : {};
+          } catch (err) {
+            data = null;
+          }
+
+          if (!response.ok) {
+            const message = (data && (data.error || data.message)) ? (data.error || data.message) : `HTTP ${response.status}`;
+            setStatus('Error: ' + message, true);
+            if (data && data.sql) {
+              sqlOutput.textContent = data.sql;
+              sqlCard.style.display = 'block';
+            }
+            return;
+          }
+
+          const sql = data && data.sql ? data.sql : '';
+          const rows = data && typeof data.rows !== 'undefined' ? data.rows : data;
+
+          sqlOutput.textContent = sql || '(no SQL returned)';
+          rowsOutput.textContent = rows ? JSON.stringify(rows, null, 2) : '[]';
+          sqlCard.style.display = 'block';
+          rowsCard.style.display = 'block';
+          setStatus('Query succeeded.');
+        } catch (err) {
+          setStatus('Error: ' + (err && err.message ? err.message : String(err)), true);
+        } finally {
+          askBtn.disabled = false;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
