@@ -1,0 +1,8 @@
+{
+  "name": "profile-site",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "better-sqlite3": "^8.0.0"
+  }
+}
