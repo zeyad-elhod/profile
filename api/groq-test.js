@@ -5,17 +5,18 @@ export default async function handler(req, res) {
       return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    // use your actual env variable name
-    if (!process.env.groqapikey) {
+    // use the Vercel env variable you actually set
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) {
       res.setHeader('Content-Type', 'application/json');
-      return res.status(500).json({ error: 'Missing groqapikey' });
+      return res.status(500).json({ error: 'Missing GROQ_API_KEY' });
     }
 
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.groqapikey}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
@@ -36,7 +37,7 @@ export default async function handler(req, res) {
     res.setHeader('Content-Type', 'application/json');
     return res.status(200).json({ message });
   } catch (err) {
-    const msg = err?.message || String(err);
+    const msg = err && err.message ? err.message : String(err);
     res.setHeader('Content-Type', 'application/json');
     return res.status(500).json({ error: msg });
   }
