@@ -283,35 +283,62 @@
   </div>
 
   <script>
-    (function(){
+    document.addEventListener('DOMContentLoaded', () => {
       const toggle = document.getElementById('theme-toggle');
       const stored = localStorage.getItem('theme');
       if (stored) document.body.setAttribute('data-theme', stored);
-      toggle.addEventListener('click', ()=>{
-        const next = document.body.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-        document.body.setAttribute('data-theme', next);
-        localStorage.setItem('theme', next);
-      });
+      if (toggle) {
+        toggle.addEventListener('click', ()=>{
+          const next = document.body.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+          document.body.setAttribute('data-theme', next);
+          localStorage.setItem('theme', next);
+        });
+      }
 
       // Chat modal
       const chatToggle = document.getElementById('chat-toggle');
       const chatModal = document.getElementById('chat-modal');
       const chatClose = document.getElementById('chat-close');
+      const chatInfo = document.getElementById('chat-info');
+      const chatInfoBtn = document.getElementById('chat-info-btn');
+      const chatInfoClose = document.getElementById('chat-info-close');
+
       if(chatToggle && chatModal && chatClose){
         chatToggle.addEventListener('click', ()=> chatModal.classList.add('active'));
         chatClose.addEventListener('click', ()=> chatModal.classList.remove('active'));
         chatModal.addEventListener('click', (e)=>{ if(e.target === chatModal) chatModal.classList.remove('active'); });
       }
-    })();
+
+      if(chatInfo && chatInfoBtn && chatInfoClose){
+        chatInfoBtn.addEventListener('click', ()=> chatInfo.classList.add('active'));
+        chatInfoClose.addEventListener('click', ()=> chatInfo.classList.remove('active'));
+        chatInfo.addEventListener('click', (e)=>{ if(e.target === chatInfo) chatInfo.classList.remove('active'); });
+      }
+    });
   </script>
   <button id="chat-toggle" class="chat-toggle" type="button">💬 Chat CV</button>
   <div id="chat-modal" class="chat-modal" aria-hidden="true">
     <div class="chat-card">
       <header>
         <h3>Ask Zeyad</h3>
-        <button id="chat-close" class="chat-close" type="button">Close</button>
+        <div class="chat-actions">
+          <button id="chat-info-btn" class="chat-btn" type="button">How it works</button>
+          <button id="chat-close" class="chat-btn" type="button">Close</button>
+        </div>
       </header>
       <iframe class="chat-iframe" src="./cv-chat.html" title="CV Chat"></iframe>
+      <div id="chat-info" class="chat-info" aria-hidden="true">
+        <div class="chat-info-card">
+          <h4>How this works</h4>
+          <p>This chat uses a Retrieval-Augmented Generation (RAG) flow over my CV.</p>
+          <ul>
+            <li>Your question is embedded locally and matched against precomputed CV chunks stored in SQLite.</li>
+            <li>The top chunks are sent with your question to the Groq Llama 3.3 70B model for a grounded reply.</li>
+            <li>The answer is constrained to the provided chunks; if info is missing, it should say it doesn't know.</li>
+          </ul>
+          <button id="chat-info-close" class="chat-btn" type="button" style="margin-top:10px;">Got it</button>
+        </div>
+      </div>
     </div>
   </div>
 </body>
