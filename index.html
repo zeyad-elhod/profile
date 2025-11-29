@@ -75,20 +75,26 @@
       color:#0b1120;
       border:none;
       border-radius:999px;
-      padding:12px 16px;
+      padding:16px 22px;
       font-weight:800;
-      box-shadow:var(--shadow);
+      box-shadow:0 0 20px rgba(34,211,238,0.5);
       cursor:pointer;
       display:flex;
       align-items:center;
-      gap:8px;
+      gap:10px;
       z-index:20;
+      animation:pulse 2s infinite;
+      font-size:15px;
+    }
+    @keyframes pulse {
+      0% { box-shadow:0 0 12px rgba(34,211,238,0.5); transform:translateY(0); }
+      50% { box-shadow:0 0 26px rgba(34,211,238,0.8); transform:translateY(-2px); }
+      100% { box-shadow:0 0 12px rgba(34,211,238,0.5); transform:translateY(0); }
     }
     .chat-modal{
       position:fixed;
       inset:0;
-      background:rgba(0,0,0,0.45);
-      backdrop-filter:blur(6px);
+      background:transparent;
       display:none;
       align-items:flex-end;
       justify-content:flex-end;
@@ -97,7 +103,7 @@
     .chat-modal.active{display:flex;}
     .chat-card{
       width: min(420px, 92vw);
-      height: min(600px, 85vh);
+      height: auto;
       background:var(--surface);
       border:1px solid var(--border);
       border-radius:16px;
@@ -107,6 +113,7 @@
       position:relative;
       display:flex;
       flex-direction:column;
+      padding-bottom:12px;
     }
     .chat-card header{
       display:flex;
@@ -149,6 +156,37 @@
     .chat-info-card h4{margin:0 0 8px; font-size:16px;}
     .chat-info-card p{margin:0 0 8px; color:var(--muted); line-height:1.5;}
     .chat-info-card ul{margin:8px 0 0 16px; color:var(--muted);}
+    .chat-body{padding:12px 14px; display:grid; gap:10px;}
+    .chat-body textarea{
+      width:100%;
+      min-height:80px;
+      border:1px solid var(--border);
+      border-radius:10px;
+      background:rgba(255,255,255,0.02);
+      color:var(--text);
+      padding:10px;
+      font-family:inherit;
+      resize:vertical;
+    }
+    .chat-body .primary{
+      background:linear-gradient(135deg,var(--accent),var(--accent-strong));
+      color:#0b1120;
+      border:none;
+      border-radius:10px;
+      padding:10px 14px;
+      font-weight:700;
+      cursor:pointer;
+      box-shadow:0 0 16px rgba(34,211,238,0.35);
+    }
+    .chat-body .answer{
+      min-height:80px;
+      border:1px solid var(--border);
+      border-radius:10px;
+      background:rgba(255,255,255,0.02);
+      padding:10px;
+      color:var(--text);
+      white-space:pre-wrap;
+    }
     @media(max-width:900px){
       .grid{grid-template-columns:1fr;}
       .hero h1{font-size:28px;}
@@ -302,6 +340,9 @@
       const chatInfo = document.getElementById('chat-info');
       const chatInfoBtn = document.getElementById('chat-info-btn');
       const chatInfoClose = document.getElementById('chat-info-close');
+      const chatQuestion = document.getElementById('chat-question');
+      const chatAnswer = document.getElementById('chat-answer');
+      const chatAsk = document.getElementById('chat-ask');
 
       if(chatToggle && chatModal && chatClose){
         chatToggle.addEventListener('click', ()=> chatModal.classList.add('active'));
@@ -314,27 +355,68 @@
         chatInfoClose.addEventListener('click', ()=> chatInfo.classList.remove('active'));
         chatInfo.addEventListener('click', (e)=>{ if(e.target === chatInfo) chatInfo.classList.remove('active'); });
       }
+
+      async function askCv(){
+        const q = (chatQuestion?.value || '').trim();
+        if(!q || !chatAnswer || !chatAsk) return;
+        chatAsk.disabled = true;
+        chatAnswer.textContent = 'Thinking...';
+        chatAnswer.classList.remove('muted');
+        try{
+          const res = await fetch('/api/cv-chat', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ question: q })
+          });
+          const text = await res.text();
+          let data = null;
+          try{ data = text ? JSON.parse(text) : null; } catch(_){}
+          if(!res.ok){
+            chatAnswer.textContent = data?.error || 'Error fetching answer.';
+            chatAnswer.classList.add('muted');
+            return;
+          }
+          chatAnswer.textContent = data?.answer || 'No answer returned.';
+        }catch(err){
+          chatAnswer.textContent = err?.message || String(err);
+          chatAnswer.classList.add('muted');
+        }finally{
+          chatAsk.disabled = false;
+        }
+      }
+
+      if(chatAsk && chatQuestion){
+        chatAsk.addEventListener('click', askCv);
+        chatQuestion.addEventListener('keydown', (e)=>{
+          if((e.metaKey || e.ctrlKey) && e.key === 'Enter'){ e.preventDefault(); askCv(); }
+        });
+      }
     });
   </script>
-  <button id="chat-toggle" class="chat-toggle" type="button">💬 Chat CV</button>
+  <button id="chat-toggle" class="chat-toggle" type="button">💬 Ask my AI agent a question</button>
   <div id="chat-modal" class="chat-modal" aria-hidden="true">
     <div class="chat-card">
       <header>
         <h3>Ask Zeyad</h3>
         <div class="chat-actions">
-          <button id="chat-info-btn" class="chat-btn" type="button">How it works</button>
+          <button id="chat-info-btn" class="chat-btn" type="button" style="padding:10px 14px; box-shadow:0 0 16px rgba(34,211,238,0.35); animation:pulse 2s infinite;">How it works</button>
           <button id="chat-close" class="chat-btn" type="button">Close</button>
         </div>
       </header>
-      <iframe class="chat-iframe" src="./cv-chat.html" title="CV Chat"></iframe>
+      <div class="chat-body">
+        <label for="chat-question" style="font-weight:700;">Question</label>
+        <textarea id="chat-question" placeholder="Ask about my experience, skills, tools, or projects..."></textarea>
+        <button id="chat-ask" class="primary" type="button">Ask Zeyad</button>
+        <div id="chat-answer" class="answer muted">Waiting for your question.</div>
+      </div>
       <div id="chat-info" class="chat-info" aria-hidden="true">
         <div class="chat-info-card">
           <h4>How this works</h4>
-          <p>This chat uses a Retrieval-Augmented Generation (RAG) flow over my CV.</p>
+          <p>This chat uses Retrieval-Augmented Generation (RAG) over my CV:</p>
           <ul>
-            <li>Your question is embedded locally and matched against precomputed CV chunks stored in SQLite.</li>
-            <li>The top chunks are sent with your question to the Groq Llama 3.3 70B model for a grounded reply.</li>
-            <li>The answer is constrained to the provided chunks; if info is missing, it should say it doesn't know.</li>
+            <li>Your question is embedded and matched to precomputed CV chunks stored in SQLite.</li>
+            <li>The top chunks (context) are sent with your question to the Groq Llama 3.3 70B model for a grounded reply.</li>
+            <li>Answers are constrained to that retrieved context; if it's not in the CV, it should say it doesn't know.</li>
           </ul>
           <button id="chat-info-close" class="chat-btn" type="button" style="margin-top:10px;">Got it</button>
         </div>
