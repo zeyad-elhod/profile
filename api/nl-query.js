@@ -63,9 +63,24 @@ export default async function handler(req, res) {
       { role: 'user', content: question },
     ]);
 
-    const rawContent = Array.isArray(response.content)
-      ? response.content.map((c) => (typeof c === 'string' ? c : c?.text || '')).join(' ').trim()
-      : String(response.content || '').trim();
+    const rawContent = (() => {
+      const c = response?.content;
+      if (Array.isArray(c)) {
+        return c
+          .map((item) => {
+            if (typeof item === 'string') return item;
+            if (item && typeof item === 'object') {
+              return item.text || item.content || JSON.stringify(item);
+            }
+            return '';
+          })
+          .join(' ')
+          .trim();
+      }
+      if (typeof c === 'string') return c.trim();
+      if (c && typeof c === 'object') return JSON.stringify(c);
+      return '';
+    })();
 
     const parsed = (() => {
       try {
