@@ -1,3 +1,15 @@
+import { ChatGroq } from '@langchain/groq';
+import { StructuredOutputParser } from '@langchain/core/output_parsers';
+import { z } from 'zod';
+
+const parser = StructuredOutputParser.fromZodSchema(
+  z.object({
+    sql: z.string().describe('Safe SQL query starting with SELECT or WITH'),
+    safe: z.boolean().describe('True only if the SQL is read-only and safe to execute'),
+    reason: z.string().describe('Short explanation of why the SQL is safe/unsafe'),
+  }),
+);
+
 export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') {
@@ -26,54 +38,56 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Missing GROQ_API_KEY' });
     }
 
-    const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [
-          {
-            role: 'system',
-            content:
-              'You are a SQL generator for a used cars database. The database has a table named cars with columns: id, brand, model, year, mileage_km, price_eur, accident_history, fuel_type, transmission. Respond ONLY with raw SQL. No backticks. No markdown. No ```sql``` fences. No explanations. The SQL output MUST begin directly with SELECT or WITH. Never generate DELETE, UPDATE, INSERT, or any DDL.',
-          },
-          { role: 'user', content: question },
-        ],
-      }),
+    const formatInstructions = parser.getFormatInstructions();
+    const model = new ChatGroq({
+      apiKey: process.env.GROQ_API_KEY,
+      model: 'llama-3.3-70b-versatile',
+      temperature: 0,
     });
 
-    if (!groqResponse.ok) {
-      const text = await groqResponse.text();
+    const response = await model.invoke([
+      {
+        role: 'system',
+        content:
+          'You are a strict SQL generator for a used cars SQLite database. Table: cars(columns: id, brand, model, year, mileage_km, price_eur, accident_history, fuel_type, transmission). Produce read-only SQL only.',
+      },
+      {
+        role: 'system',
+        content:
+          'Rules: only SELECT or WITH; never write/DDL (no INSERT/UPDATE/DELETE/CREATE/ALTER/DROP/TRUNCATE/REPLACE/MERGE); avoid semicolons that chain statements; keep it minimal and safe.',
+      },
+      {
+        role: 'system',
+        content: `Output JSON with keys {sql, safe, reason}. Use these instructions: ${formatInstructions}`,
+      },
+      { role: 'user', content: question },
+    ]);
+
+    const parsed = (() => {
+      try {
+        return parser.parse(response.content);
+      } catch (err) {
+        return null;
+      }
+    })();
+
+    const sql = parsed?.sql ? String(parsed.sql).trim() : '';
+    const safe = Boolean(parsed?.safe);
+    const reason = parsed?.reason || 'No reason provided';
+
+    if (!sql) {
       res.setHeader('Content-Type', 'application/json');
-      return res.status(500).json({ error: `Groq API error: ${text}` });
+      return res.status(400).json({ error: 'No SQL returned by model' });
     }
-
-    const groqData = await groqResponse.json();
-    let sql = groqData?.choices?.[0]?.message?.content || '';
-    sql = sql.trim();
-    sql = sql.replace(/^```sql/i, '');
-    sql = sql.replace(/^```/i, '');
-    sql = sql.replace(/```$/i, '');
-    sql = sql.trim();
-
-    console.log('Generated SQL:', sql);
-    console.log('Generated SQL from Groq:', sql);
 
     const sqlUpper = sql.toUpperCase().trim();
-    if (!(sqlUpper.startsWith('SELECT') || sqlUpper.startsWith('WITH'))) {
-      res.setHeader('Content-Type', 'application/json');
-      return res.status(400).json({ error: 'LLM produced non-SELECT SQL', sql });
-    }
+    const startsOk = sqlUpper.startsWith('SELECT') || sqlUpper.startsWith('WITH');
     const forbidden = ['DELETE', 'UPDATE', 'INSERT', 'DROP', 'ALTER', 'TRUNCATE', 'CREATE', 'REPLACE', 'MERGE'];
-    for (const kw of forbidden) {
-      const re = new RegExp(`\\b${kw}\\b`, 'i');
-      if (re.test(sql)) {
-        res.setHeader('Content-Type', 'application/json');
-        return res.status(400).json({ error: 'LLM produced unsafe SQL', sql });
-      }
+    const hasForbidden = forbidden.some((kw) => new RegExp(`\\b${kw}\\b`, 'i').test(sql));
+
+    if (!safe || !startsOk || hasForbidden) {
+      res.setHeader('Content-Type', 'application/json');
+      return res.status(400).json({ error: 'Unsafe SQL blocked', sql, reason });
     }
 
     const queryUrl = `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers.host}/api/query`;
@@ -94,7 +108,7 @@ export default async function handler(req, res) {
     }
 
     res.setHeader('Content-Type', 'application/json');
-    return res.status(200).json({ sql, rows: queryData });
+    return res.status(200).json({ sql, rows: queryData, reason });
   } catch (err) {
     const msg = err && err.message ? err.message : String(err);
     res.setHeader('Content-Type', 'application/json');

@@ -56,7 +56,8 @@ def main():
 
     data = []
     for i, chunk in enumerate(chunks, start=1):
-        emb = model.encode(chunk).tolist()
+        # Normalize so offline vectors match runtime embeddings (Xenova uses normalize=true)
+        emb = model.encode(chunk, normalize_embeddings=True).tolist()
         data.append({"id": i, "chunk_text": chunk, "embedding": emb})
 
         if i % 10 == 0 or i == len(chunks):
