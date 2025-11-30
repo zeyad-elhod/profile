@@ -79,9 +79,14 @@ export default async function handler(req, res) {
       }
     })();
 
-    const sql = parsed?.sql ? String(parsed.sql).trim() : '';
-    const safe = Boolean(parsed?.safe);
+    let sql = parsed?.sql ? String(parsed.sql).trim() : '';
+    const safe = parsed && typeof parsed.safe !== 'undefined' ? Boolean(parsed.safe) : true;
     const reason = parsed?.reason || 'No reason provided';
+
+    if (!sql && rawContent) {
+      // Fallback: if model returned raw SQL string
+      sql = rawContent.trim();
+    }
 
     if (!sql) {
       res.setHeader('Content-Type', 'application/json');
