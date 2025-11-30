@@ -63,11 +63,19 @@ export default async function handler(req, res) {
       { role: 'user', content: question },
     ]);
 
+    const rawContent = Array.isArray(response.content)
+      ? response.content.map((c) => (typeof c === 'string' ? c : c?.text || '')).join(' ').trim()
+      : String(response.content || '').trim();
+
     const parsed = (() => {
       try {
-        return parser.parse(response.content);
+        return parser.parse(rawContent);
       } catch (err) {
-        return null;
+        try {
+          return typeof rawContent === 'string' ? JSON.parse(rawContent) : null;
+        } catch (_) {
+          return null;
+        }
       }
     })();
 
